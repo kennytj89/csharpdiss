@@ -1,0 +1,174 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Member : MonoBehaviour {
+
+    public Vector3 Position;
+    public Vector3 Velocity;
+    public Vector3 Acceleration;
+
+    public Stage stage;
+    public MemberConfig Configure;
+
+    private Vector3 WanderTarget;
+
+    void Start()
+    {
+        stage = FindObjectOfType<Stage>();
+        Configure = FindObjectOfType<MemberConfig>();
+
+        Position = transform.position;
+        Velocity = new Vector3(Random.Range(-3, 3), Random.Range(-3, 3), 0);
+
+    }
+
+    void Update()
+    {
+        Acceleration = Combine();
+        Acceleration = Vector3.ClampMagnitude(Acceleration, Configure.MaximumAcceleration);
+        Velocity = Velocity + Acceleration * Time.deltaTime;
+        Velocity = Vector3.ClampMagnitude(Velocity, Configure.MaximumVelocity);
+        Position = Position + Velocity * Time.deltaTime;
+        WrapAround(ref Position, -stage.bounds, stage.bounds);
+        transform.position = Position;
+    }
+
+    //Wander code.
+    protected Vector3 Wander()
+    {
+        float Jitter = Configure.WanderingJitter * Time.deltaTime;
+        WanderTarget += new Vector3(0, RandomBinomial() * Jitter, 0);
+        WanderTarget = WanderTarget.normalized;
+        WanderTarget *= Configure.WanderingRadius;
+        Vector3 TargetInLocalSpace = WanderTarget + new Vector3(Configure.WanderingDistance, Configure.WanderingDistance, 0);
+        Vector3 TargetInWorldSpace = transform.TransformPoint(TargetInLocalSpace);
+        TargetInWorldSpace -= this.Position;
+        return TargetInWorldSpace.normalized;
+    }
+
+    //Cohesion code.
+    Vector3 Cohesion()
+    {
+        Vector3 cohesionVector = new Vector3();
+        int countMembers = 0;
+        var neighbours = stage.GetNeighbours(this, Configure.CohesionRadius);
+        if (neighbours.Count == 0)
+            return cohesionVector;
+        foreach (var member in neighbours)
+        {
+            if (isInFOV(member.Position))
+            {
+                cohesionVector += member.Position;
+                countMembers++;
+            }
+        }
+
+        if (countMembers == 0)
+            return cohesionVector;
+
+        cohesionVector /= countMembers;
+        cohesionVector = cohesionVector - this.Position;
+        cohesionVector = Vector3.Normalize(cohesionVector);
+        return cohesionVector;
+    }
+
+    //Alignment code
+    Vector3 Alignment()
+    {
+        Vector3 alignVector = new Vector3();
+        var members = stage.GetNeighbours(this, Configure.AlignmentRadius);
+        if (members.Count == 0)
+            return alignVector;
+
+        foreach (var member in members)
+            {
+                if (isInFOV(member.Position))
+                alignVector += member.Velocity;
+            }
+
+        return alignVector.normalized;
+    }
+
+    //Separation code
+    Vector3 Separation()
+    {
+        Vector3 SeparateVec = new Vector3();
+        var members = stage.GetNeighbours(this, Configure.SeparationRadius);
+        if (members.Count == 0)
+            return SeparateVec;
+
+        foreach (var member in members)
+        {
+            if (isInFOV(member.Position))
+                {
+                    Vector3 MovingTowards = this.Position - member.Position;
+                    if (MovingTowards.magnitude >= 0)
+                        {
+                            SeparateVec += MovingTowards.normalized / MovingTowards.magnitude;
+                        }
+                }
+        }
+
+        return SeparateVec.normalized;
+    }
+
+    //Avoidance code, specifically for avoiding enemies. Though not perfect the agents will bump into enemies but still actively avoid them.
+    Vector3 Avoidance()
+    {
+        Vector3 AvoidVector = new Vector3();
+        var EnemyList = stage.GetEnemies(this, Configure.AvoidanceRadius);
+        if (EnemyList.Count == 0)
+            return AvoidVector;
+        foreach (var enemy in EnemyList)
+            {
+                 AvoidVector += RunAway(enemy.Position);
+            }
+        return AvoidVector.normalized;
+    }
+
+    //Code to allow agents to "run away" from an enemy.
+    Vector3 RunAway(Vector3 target)
+    {
+        Vector3 NeededVelocity = (Position - target).normalized * Configure.MaximumVelocity;
+        return NeededVelocity - Velocity;
+    }
+
+    //Combination of various parameters to allow the movement.
+    virtual protected Vector3 Combine()
+    {
+        Vector3 finalVector = Configure.CohesionPriority * Cohesion() + Configure.WanderingPriority * Wander()
+            + Configure.AlignmentPriority * Alignment() + Configure.SeparationPriority * Separation()
+            + Configure.AvoidancePriority * Avoidance();
+        return finalVector;
+    }
+
+    //Wraparound vectors to allow movement through the boundaries.
+    void WrapAround(ref Vector3 Vector, float min, float max)
+    {
+        Vector.x = WrapAroundFloat(Vector.x, min, max);
+        Vector.y = WrapAroundFloat(Vector.y, min, max);
+        Vector.z = WrapAroundFloat(Vector.z, min, max);
+    }
+
+    //Wrap around floats
+    float WrapAroundFloat(float Value, float min, float max)
+    {
+        if (Value > max)
+            Value = min;
+        else if (Value < min)
+            Value = max;
+        return Value;
+    }
+
+    float RandomBinomial()
+    {
+        return Random.Range(0f, 1 - Random.Range(0f, 1f));
+    }
+
+    //Bool to declare if object is within FOV
+    bool isInFOV(Vector3 vec)
+    {
+        return Vector3.Angle(this.Velocity, vec - this.Position) <= Configure.MaximumFieldOfVision;
+    }
+}
