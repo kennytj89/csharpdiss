@@ -1,0 +1,31 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MemberConfig : MonoBehaviour {
+    public float MaximumFieldOfVision = 180;
+    public float MaximumAcceleration;
+    public float MaximumVelocity;
+
+    //Wander variables
+    public float WanderingJitter;
+    public float WanderingRadius;
+    public float WanderingDistance;
+    public float WanderingPriority;
+
+    //Cohesion variables
+    public float CohesionRadius;
+    public float CohesionPriority;
+
+    //Alignment variables
+    public float AlignmentRadius;
+    public float AlignmentPriority;
+
+    //Seperation Variables
+    public float SeparationRadius;
+    public float SeparationPriority;
+
+    //Avoidance Variables
+    public float AvoidanceRadius;
+    public float AvoidancePriority;
+}
